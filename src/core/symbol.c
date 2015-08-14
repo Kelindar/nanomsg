@@ -33,6 +33,7 @@
 #include "../pipeline.h"
 #include "../survey.h"
 #include "../bus.h"
+#include "../subbus.h"
 
 #include <string.h>
 
@@ -122,6 +123,8 @@ static const struct nn_symbol_properties sym_value_names [] = {
     {NN_RESPONDENT, "NN_RESPONDENT", NN_NS_PROTOCOL,
         NN_TYPE_NONE, NN_UNIT_NONE},
     {NN_BUS, "NN_BUS", NN_NS_PROTOCOL,
+        NN_TYPE_NONE, NN_UNIT_NONE},
+    {NN_BUS, "NN_SUBBUS", NN_NS_PROTOCOL,
         NN_TYPE_NONE, NN_UNIT_NONE},
 
     {NN_SOCKADDR_MAX, "NN_SOCKADDR_MAX", NN_NS_LIMIT,

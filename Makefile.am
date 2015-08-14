@@ -41,6 +41,7 @@ nninclude_HEADERS = \
     src/pipeline.h \
     src/survey.h \
     src/bus.h \
+    src/subbus.h \
     src/tcpmux.h
 
 lib_LTLIBRARIES = libnanomsg.la
@@ -172,6 +173,12 @@ PROTOCOLS_BUS = \
     src/protocols/bus/bus.c \
     src/protocols/bus/xbus.h \
     src/protocols/bus/xbus.c
+    
+PROTOCOLS_SUBBUS = \
+    src/protocols/subbus/subbus.h \
+    src/protocols/subbus/subbus.c \
+    src/protocols/subbus/xsubbus.h \
+    src/protocols/subbus/xsubbus.c
 
 PROTOCOLS_PIPELINE = \
     src/protocols/pipeline/push.h \
@@ -225,6 +232,7 @@ PROTOCOLS_SURVEY = \
 
 NANOMSG_PROTOCOLS = \
     $(PROTOCOLS_BUS) \
+    $(PROTOCOLS_SUBBUS) \
     $(PROTOCOLS_PIPELINE) \
     $(PROTOCOLS_PAIR) \
     $(PROTOCOLS_PUBSUB) \
@@ -356,6 +364,7 @@ MAN7 = \
     doc/nn_survey.txt \
     doc/nn_pipeline.txt \
     doc/nn_bus.txt \
+    doc/nn_subbus.txt \
     doc/nn_inproc.txt \
     doc/nn_ipc.txt \
     doc/nn_tcp.txt \
@@ -482,7 +491,7 @@ PROTOCOL_TESTS = \
     tests/reqrep \
     tests/pipeline \
     tests/survey \
-    tests/bus
+    tests/bus 
 
 FEATURE_TESTS = \
     tests/block \
@@ -585,6 +594,7 @@ install-exec-hook:
           $(LN_S) -f nanocat nn_surveyor$(EXEEXT) && \
           $(LN_S) -f nanocat nn_respondent$(EXEEXT) && \
           $(LN_S) -f nanocat nn_bus$(EXEEXT) && \
+          $(LN_S) -f nanocat nn_subbus$(EXEEXT) && \
           $(LN_S) -f nanocat nn_pair$(EXEEXT)
 
 uninstall-hook:
@@ -598,6 +608,7 @@ uninstall-hook:
           rm -f nn_surveyor$(EXEEXT) ; \
           rm -f nn_respondent$(EXEEXT) ; \
           rm -f nn_bus$(EXEEXT) ; \
+          rm -f nn_subbus$(EXEEXT) ; \
           rm -f nn_pair$(EXEEXT)
 	cd $(DESTDIR)$(libdir) && \
           rm -f libnanomsg.*
