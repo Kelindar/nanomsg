@@ -175,6 +175,10 @@ PROTOCOLS_BUS = \
     src/protocols/bus/xbus.c
     
 PROTOCOLS_SUBBUS = \
+    src/protocols/subbus/llist.h \
+    src/protocols/subbus/llist.c \
+    src/protocols/subbus/trie.h \
+    src/protocols/subbus/trie.c \
     src/protocols/subbus/subbus.h \
     src/protocols/subbus/subbus.c \
     src/protocols/subbus/xsubbus.h \
@@ -491,7 +495,8 @@ PROTOCOL_TESTS = \
     tests/reqrep \
     tests/pipeline \
     tests/survey \
-    tests/bus 
+    tests/bus \
+    tests/subbus
 
 FEATURE_TESTS = \
     tests/block \

@@ -27,6 +27,7 @@
 
 #include "../utils/dist.h"
 #include "../utils/fq.h"
+#include "trie.h"
 
 extern struct nn_socktype *nn_xsubbus_socktype;
 
@@ -39,23 +40,27 @@ struct nn_xsubbus {
     struct nn_sockbase sockbase;
     struct nn_dist outpipes;
     struct nn_fq inpipes;
+	struct nn_xtrie trie;
 };
 
-void nn_xsubbus_init (struct nn_xsubbus *self,
-    const struct nn_sockbase_vfptr *vfptr, void *hint);
+
+void nn_xsubbus_init (struct nn_xsubbus *self, const struct nn_sockbase_vfptr *vfptr, void *hint);
 void nn_xsubbus_term (struct nn_xsubbus *self);
+
+int nn_xsubbus_handle_event(struct nn_sockbase *self, struct nn_msg *msg,  struct nn_pipe *pipe);
+int nn_xsubbus_subscribe(struct nn_sockbase *self, struct nn_pipe *pipe, const void *subval, size_t subvallen);
+int nn_xsubbus_unsubscribe(struct nn_sockbase *self, struct nn_pipe *pipe, const void *subval, size_t subvallen);
 
 int nn_xsubbus_add (struct nn_sockbase *self, struct nn_pipe *pipe);
 void nn_xsubbus_rm (struct nn_sockbase *self, struct nn_pipe *pipe);
 void nn_xsubbus_in (struct nn_sockbase *self, struct nn_pipe *pipe);
 void nn_xsubbus_out (struct nn_sockbase *self, struct nn_pipe *pipe);
 int nn_xsubbus_events (struct nn_sockbase *self);
+int nn_xsubbus_broadcast (struct nn_sockbase *self, struct nn_msg *msg);
 int nn_xsubbus_send (struct nn_sockbase *self, struct nn_msg *msg);
 int nn_xsubbus_recv (struct nn_sockbase *self, struct nn_msg *msg);
-int nn_xsubbus_setopt (struct nn_sockbase *self, int level, int option,
-    const void *optval, size_t optvallen);
-int nn_xsubbus_getopt (struct nn_sockbase *self, int level, int option,
-    void *optval, size_t *optvallen);
+int nn_xsubbus_setopt (struct nn_sockbase *self, int level, int option, const void *optval, size_t optvallen);
+int nn_xsubbus_getopt (struct nn_sockbase *self, int level, int option, void *optval, size_t *optvallen);
 
 int nn_xsubbus_ispeer (int socktype);
 

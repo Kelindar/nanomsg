@@ -20,10 +20,13 @@
     IN THE SOFTWARE.
 */
 
+#include <stdlib.h>
 #include "xsubbus.h"
+#include "trie.h"
 
 #include "../../nn.h"
 #include "../../subbus.h"
+#include "../utils/fq.h"
 
 #include "../../utils/err.h"
 #include "../../utils/cont.h"
@@ -63,10 +66,12 @@ void nn_xsubbus_init (struct nn_xsubbus *self,
     nn_sockbase_init (&self->sockbase, vfptr, hint);
     nn_dist_init (&self->outpipes);
     nn_fq_init (&self->inpipes);
+	nn_xtrie_init(&self->trie);
 }
 
 void nn_xsubbus_term (struct nn_xsubbus *self)
 {
+	nn_xtrie_term(&self->trie);
     nn_fq_term (&self->inpipes);
     nn_dist_term (&self->outpipes);
     nn_sockbase_term (&self->sockbase);
@@ -147,34 +152,60 @@ int nn_xsubbus_events (struct nn_sockbase *self)
         sockbase)->inpipes) ? NN_SOCKBASE_EVENT_IN : 0) | NN_SOCKBASE_EVENT_OUT;
 }
 
+
+int nn_xsubbus_broadcast(struct nn_sockbase *self, struct nn_msg *msg)
+{
+	size_t hdrsz;
+	struct nn_pipe *exclude;
+
+	hdrsz = nn_chunkref_size(&msg->sphdr);
+	if (hdrsz == 0)
+		exclude = NULL;
+	else if (hdrsz == sizeof(uint64_t)) {
+		memcpy(&exclude, nn_chunkref_data(&msg->sphdr), sizeof(exclude));
+		nn_chunkref_term(&msg->sphdr);
+		nn_chunkref_init(&msg->sphdr, 0);
+	}
+	else
+		return -EINVAL;
+
+	return nn_dist_send(&nn_cont(self, struct nn_xsubbus, sockbase)->outpipes, msg, exclude);
+}
+
 int nn_xsubbus_send (struct nn_sockbase *self, struct nn_msg *msg)
 {
-    size_t hdrsz;
-    struct nn_pipe *exclude;
+    struct nn_dist* subscribers;
+    struct nn_xsubbus *xsubbus;
+	char op = *((char*)nn_chunkref_data(&msg->body));
 
-    hdrsz = nn_chunkref_size (&msg->sphdr);
-    if (hdrsz == 0)
-        exclude = NULL;
-    else if (hdrsz == sizeof (uint64_t)) {
-        memcpy (&exclude, nn_chunkref_data (&msg->sphdr), sizeof (exclude));
-        nn_chunkref_term (&msg->sphdr);
-        nn_chunkref_init (&msg->sphdr, 0);
-    }
-    else
-        return -EINVAL;
+	/* Messages are prefixed with operation type 'M' */
+	if (op == 'M') {
+		/* Match the message and retrieve the list of subscribers to send the message to */
+		xsubbus = nn_cont(self, struct nn_xsubbus, sockbase);
+		subscribers = nn_xtrie_match(&xsubbus->trie, nn_chunkref_data(&msg->body), nn_chunkref_size(&msg->body));
+		if (subscribers == NULL) {
+			nn_msg_term(msg);
+			return 0;
+		}
 
-    return nn_dist_send (&nn_cont (self, struct nn_xsubbus, sockbase)->outpipes,
-        msg, exclude);
+		/* Send the message to the list of subscribers */
+		return nn_dist_send(subscribers, msg, NULL);
+	}
+	else {
+		/* Other event types are broadcasted through the network */
+		return nn_xsubbus_broadcast(self, msg);
+	}
 }
+
 
 int nn_xsubbus_recv (struct nn_sockbase *self, struct nn_msg *msg)
 {
     int rc;
     struct nn_xsubbus *xsubbus;
     struct nn_pipe *pipe;
+	uint8_t op;
 
     xsubbus = nn_cont (self, struct nn_xsubbus, sockbase);
-
     while (1) {
 
         /*  Get next message in fair-queued manner. */
@@ -182,26 +213,61 @@ int nn_xsubbus_recv (struct nn_sockbase *self, struct nn_msg *msg)
         if (nn_slow (rc < 0))
             return rc;
 
-        /*  The message should have no header. Drop malformed messages. */
-        if (nn_chunkref_size (&msg->sphdr) == 0)
+		/*  The message should have no header. Drop malformed messages. */
+		if (nn_chunkref_size(&msg->sphdr) == 0)
             break;
         nn_msg_term (msg);
     }
 
-    /*  Add pipe ID to the message header. */
-    nn_chunkref_term (&msg->sphdr);
-    nn_chunkref_init (&msg->sphdr, sizeof (uint64_t));
-    memset (nn_chunkref_data (&msg->sphdr), 0, sizeof (uint64_t));
-    memcpy (nn_chunkref_data (&msg->sphdr), &pipe, sizeof (pipe));
-
-    return 0;
+	/* Check if its' a message */
+	op = *((uint8_t*)nn_chunkref_data(&msg->body));
+	if (op == 77) { // 'M'
+		printf("Message of %d bytes\n", rc);
+		return 0;
+	}
+	else {
+		/* This is a system event, handle differently*/
+		return nn_xsubbus_handle_event(self, msg, pipe);
+	}
 }
+
+int nn_xsubbus_handle_event(struct nn_sockbase *self, struct nn_msg *msg, struct nn_pipe *pipe)
+{
+	/*  The message should have no header. Drop malformed messages. */
+	if (nn_chunkref_size(&msg->sphdr) != 0)		
+		nn_msg_term(msg);
+
+	uint8_t  op = *((uint8_t*)nn_chunkref_data(&msg->body));
+	char* topic = (char*)(nn_chunkref_data(&msg->body)) + 1;
+	size_t size = nn_chunkref_size(&msg->body) - 1;
+
+
+	if (op == 83) { // 'S'
+		printf("SUBSCRIBE %d on '%s' \n", pipe, topic);
+		nn_xsubbus_subscribe(self, pipe, topic, size);
+	}
+
+	if (op == 85) { // 'U'
+		printf("UNSUBSCRIBE %d on '%s' \n", pipe, topic);
+		nn_xsubbus_unsubscribe(self, pipe, topic, size);
+	}
+
+
+	/*  Add pipe ID to the message header. */
+	nn_chunkref_term(&msg->sphdr);
+	nn_chunkref_init(&msg->sphdr, sizeof(uint64_t));
+	memset(nn_chunkref_data(&msg->sphdr), 0, sizeof(uint64_t));
+	memcpy(nn_chunkref_data(&msg->sphdr), &pipe, sizeof(pipe));
+
+	return 0;
+}
+
 
 int nn_xsubbus_setopt (NN_UNUSED struct nn_sockbase *self, NN_UNUSED int level,
     NN_UNUSED int option,
     NN_UNUSED const void *optval, NN_UNUSED size_t optvallen)
 {
-    return -ENOPROTOOPT;
+	return -ENOPROTOOPT;
 }
 
 int nn_xsubbus_getopt (NN_UNUSED struct nn_sockbase *self, NN_UNUSED int level,
@@ -227,6 +293,31 @@ int nn_xsubbus_ispeer (int socktype)
 {
     return socktype == NN_SUBBUS ? 1 : 0;
 }
+
+int nn_xsubbus_subscribe(struct nn_sockbase *self, struct nn_pipe *pipe, const void *subval, size_t subvallen)
+{
+	int rc;
+	struct nn_xsubbus *xsubbus;
+
+	xsubbus = nn_cont(self, struct nn_xsubbus, sockbase);
+	rc = nn_xtrie_subscribe(&xsubbus->trie, pipe, subval, subvallen);
+	if (rc >= 0)
+		return 0;
+	return rc;
+}
+
+int nn_xsubbus_unsubscribe(struct nn_sockbase *self, struct nn_pipe *pipe, const void *subval, size_t subvallen)
+{
+	int rc;
+	struct nn_xsubbus *xsubbus;
+
+	xsubbus = nn_cont(self, struct nn_xsubbus, sockbase);
+	rc = nn_xtrie_unsubscribe(&xsubbus->trie, pipe, subval, subvallen);
+	if (rc >= 0)
+		return 0;
+	return rc;
+}
+
 
 static struct nn_socktype nn_xsubbus_socktype_struct = {
     AF_SP_RAW,

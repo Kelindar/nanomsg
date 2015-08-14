@@ -158,6 +158,10 @@ set (NN_SOURCES
     protocols/bus/xbus.h
     protocols/bus/xbus.c
     
+    protocols/subbus/llist.h
+    protocols/subbus/llist.c
+    protocols/subbus/trie.h
+    protocols/subbus/trie.c
     protocols/subbus/subbus.h
     protocols/subbus/subbus.c
     protocols/subbus/xsubbus.h

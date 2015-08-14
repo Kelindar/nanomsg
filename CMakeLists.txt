@@ -80,6 +80,7 @@ add_libnanomsg_test (reqrep)
 add_libnanomsg_test (pipeline)
 add_libnanomsg_test (survey)
 add_libnanomsg_test (bus)
+add_libnanomsg_test (subbus)
 
 #  Feature tests.
 add_libnanomsg_test (block)

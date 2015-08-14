@@ -31,6 +31,10 @@ extern "C" {
 
 #define NN_SUBBUS (NN_PROTO_SUBBUS * 16 + 0)
 
+#define NN_SUBBUS_SUBSCRIBE 1
+#define NN_SUBBUS_UNSUBSCRIBE 2
+
+
 #ifdef __cplusplus
 }
 #endif
