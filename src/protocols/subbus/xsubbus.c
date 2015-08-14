@@ -214,21 +214,27 @@ int nn_xsubbus_recv (struct nn_sockbase *self, struct nn_msg *msg)
             return rc;
 
 		/*  The message should have no header. Drop malformed messages. */
-		if (nn_chunkref_size(&msg->sphdr) == 0)
-            break;
+		if (nn_chunkref_size(&msg->sphdr) == 0) {
+
+			/* Check the type of the message */
+			op = *((uint8_t*)nn_chunkref_data(&msg->body));
+			if (op == 77) { // 'M'
+				printf("Message of %d bytes\n", rc);
+				return 0;
+			}
+			else {
+				/* This is a system event, handle differently */
+				nn_xsubbus_handle_event(self, msg, pipe);
+				nn_msg_term(msg);
+				continue;
+			}
+		}
+
+		/* Drop malformed messages*/
         nn_msg_term (msg);
     }
 
-	/* Check if its' a message */
-	op = *((uint8_t*)nn_chunkref_data(&msg->body));
-	if (op == 77) { // 'M'
-		printf("Message of %d bytes\n", rc);
-		return 0;
-	}
-	else {
-		/* This is a system event, handle differently*/
-		return nn_xsubbus_handle_event(self, msg, pipe);
-	}
+	return 0;
 }
 
 int nn_xsubbus_handle_event(struct nn_sockbase *self, struct nn_msg *msg, struct nn_pipe *pipe)
