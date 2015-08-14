@@ -25,9 +25,11 @@
 #include <stdio.h>
 
 #include "trie.h"
+#include "xsubbus.h"
 #include "../../utils/alloc.h"
 #include "../../utils/fast.h"
 #include "../../utils/err.h"
+#include "../utils/dist.h"
 
 /*  Double check that the size of node structure is as small as
     we believe it to be. */
@@ -432,14 +434,17 @@ step4:
     /*  Step 5 -- Create the subscription as such. */
 step5:
 
-    ++(*node)->refcount;
-    nn_dist_init (&(*node)->subscribers);
+	if (++(*node)->refcount == 1) {
+		nn_vector_init(&(*node)->subscribers);
+	}
+    
+	nn_vector_add(&(*node)->subscribers, pipe);
 
     /*  Return 1 in case of a fresh subscription. */
     return (*node)->refcount == 1 ? 1 : 0;
 }
 
-struct nn_dist* nn_xtrie_match (struct nn_xtrie *self, const uint8_t *data, size_t size)
+struct nn_vector* nn_xtrie_match (struct nn_xtrie *self, const uint8_t *data, size_t size)
 {
     struct nn_xtrie_node *node;
     struct nn_xtrie_node **tmp;
@@ -636,11 +641,15 @@ found:
 
     /*  Subscription exists. Unsubscribe. */
     --(*self)->refcount;
-    nn_dist_term (&(*self)->subscribers);
+
+	nn_vector_remove(&(*self)->subscribers, pipe);
 
     /*  If reference count has dropped to zero we can try to compact
         the node. */
     if (!(*self)->refcount) {
+
+		/* remove the distributor */
+		nn_vector_free(&(*self)->subscribers);
 
         /*  If there are no children, we can delete the node altogether. */
         if (!(*self)->type) {

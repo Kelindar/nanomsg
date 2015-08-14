@@ -59,12 +59,16 @@ int node(const int argc, const char **argv)
 	{
 		// RECV
 		char *buf = NULL;
-		int recv = nn_recv(sock, &buf, NN_MSG, 0);
+		int recv = nn_recv(sock, &buf, NN_MSG, NN_DONTWAIT);
 		if (recv >= 0)
 		{
 			printf("%s: RECEIVED '%s' FROM BUS\n", argv[1], buf);
 			nn_freemsg(buf);
 		}
+
+		Sleep(1000);
+
+		int send = nn_send(sock, argv[1], sz_n, 0);
 	}
 	return nn_shutdown(sock, 0);
 }

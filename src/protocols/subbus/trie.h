@@ -25,6 +25,7 @@
 
 #include "../../utils/int.h"
 #include "../utils/dist.h"
+#include "llist.h"
 
 #include <stddef.h>
 
@@ -61,7 +62,7 @@ struct nn_xtrie_node
     
     /*  The list of the subscriber pipes for the current leaf. We are using the
         nn_dist structure so we can distribute fairly. */
-    struct nn_dist subscribers;
+    struct nn_vector subscribers;
 
     /*  The array of characters pointing to individual children of the node.
         Actual pointers to child nodes are stored in the memory following
@@ -116,7 +117,7 @@ int nn_xtrie_unsubscribe (struct nn_xtrie *self, struct nn_pipe *pipe, const uin
 
 /*  Checks the supplied string. If it matches it returns the subscribers list,
     if it does not it returns NULL. */
-struct nn_dist* nn_xtrie_match (struct nn_xtrie *self, const uint8_t *data, size_t size);
+struct nn_vector* nn_xtrie_match (struct nn_xtrie *self, const uint8_t *data, size_t size);
 
 /*  Debugging interface. */
 void nn_xtrie_dump (struct nn_xtrie *self);

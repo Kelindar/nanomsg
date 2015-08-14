@@ -109,12 +109,12 @@ static int nn_subbus_recv (struct nn_sockbase *self, struct nn_msg *msg)
     if (nn_slow (rc == -EAGAIN))
         return -EAGAIN;
     errnum_assert (rc == 0, -rc);
-    nn_assert (nn_chunkref_size (&msg->sphdr) == sizeof (uint64_t));
 
     /*  Discard the header. */
-    nn_chunkref_term (&msg->sphdr);
-    nn_chunkref_init (&msg->sphdr, 0);
-    
+    if ( nn_chunkref_size (&msg->sphdr) > 0){
+        nn_chunkref_term (&msg->sphdr);
+        nn_chunkref_init (&msg->sphdr, 0);
+    }
     return 0;
 }
 

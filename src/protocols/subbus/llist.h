@@ -1,37 +1,31 @@
-#ifndef NN_LLIST_INCLUDED
-#define NN_LLIST_INCLUDED
+#ifndef NN_VECTOR_INCLUDED
+#define NN_VECTOR_INCLUDED
 
 #include <stddef.h>
 
-// data type - set for integers, modifiable
-typedef int nn_llist_data; 
-struct nn_llist_node
-{
-    nn_llist_data data;
-	struct nn_llist_node *next;
+#include "../../protocol.h"
+#define VECTOR_INITIAL_CAPACITY 32
+
+// Define a vector type
+typedef struct nn_vector{
+  int size;
+  int capacity; 
+  int count;
+  struct nn_pipe **data;
 };
- 
- 
-/* Gets the length of the linked-list */
-int nn_llist_len(struct nn_llist_node *nn_llist_node_head);
 
-/* Pushes a new node to the linked-list */ 
-void nn_llist_push(struct nn_llist_node **nn_llist_node_head, nn_llist_data d); 
+void nn_vector_init(struct nn_vector *vector);
 
-/* Removes the head from the linked-list & returns its value */
-nn_llist_data nn_llist_pop(struct nn_llist_node **nn_llist_node_head);
+void nn_vector_add(struct nn_vector *vector, struct nn_pipe* value);
 
-/* prints all the linked-list data */
-void nn_llist_print(struct nn_llist_node **nn_llist_node_head);
+struct nn_pipe* nn_vector_get(struct nn_vector *vector, int index);
 
-/* clears the linked-list of all elements */
-void nn_llist_clear(struct nn_llist_node **nn_llist_node_head);
+void nn_vector_double_capacity_if_full(struct nn_vector *vector);
 
-/* appends a node to the linked-list */
-void nn_llist_snoc(struct nn_llist_node **nn_llist_node_head, nn_llist_data d);
+void nn_vector_remove(struct nn_vector *vector, struct nn_pipe* value);
 
-/* checks for an element */
-int nn_llist_elem(struct nn_llist_node **nn_llist_node_head, nn_llist_data d);
- 
+void nn_vector_free(struct nn_vector *vector);
+
+int nn_vector_send (struct nn_dist *self, struct nn_msg *msg, struct nn_pipe *exclude);
 
 #endif

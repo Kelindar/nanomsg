@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include "xsubbus.h"
 #include "trie.h"
+#include "llist.h"
 
 #include "../../nn.h"
 #include "../../subbus.h"
@@ -115,8 +116,11 @@ void nn_xsubbus_rm (struct nn_sockbase *self, struct nn_pipe *pipe)
     struct nn_xsubbus *xsubbus;
     struct nn_xsubbus_data *data;
 
+
     xsubbus = nn_cont (self, struct nn_xsubbus, sockbase);
     data = nn_pipe_getdata (pipe);
+
+	printf("Pipe %d died \n", pipe);
 
     nn_fq_rm (&xsubbus->inpipes, &data->initem);
     nn_dist_rm (&xsubbus->outpipes, &data->outitem);
@@ -174,7 +178,7 @@ int nn_xsubbus_broadcast(struct nn_sockbase *self, struct nn_msg *msg)
 
 int nn_xsubbus_send (struct nn_sockbase *self, struct nn_msg *msg)
 {
-    struct nn_dist* subscribers;
+    struct nn_vector* subscribers;
     struct nn_xsubbus *xsubbus;
 	char op = *((char*)nn_chunkref_data(&msg->body));
 
@@ -182,14 +186,14 @@ int nn_xsubbus_send (struct nn_sockbase *self, struct nn_msg *msg)
 	if (op == 'M') {
 		/* Match the message and retrieve the list of subscribers to send the message to */
 		xsubbus = nn_cont(self, struct nn_xsubbus, sockbase);
-		subscribers = nn_xtrie_match(&xsubbus->trie, nn_chunkref_data(&msg->body), nn_chunkref_size(&msg->body));
+		subscribers = nn_xtrie_match(&xsubbus->trie, (uint8_t*)nn_chunkref_data(&msg->body) + 1, nn_chunkref_size(&msg->body) - 1);
 		if (subscribers == NULL) {
 			nn_msg_term(msg);
 			return 0;
 		}
 
 		/* Send the message to the list of subscribers */
-		return nn_dist_send(subscribers, msg, NULL);
+		return nn_vector_send(subscribers, msg, NULL);
 	}
 	else {
 		/* Other event types are broadcasted through the network */
@@ -219,7 +223,6 @@ int nn_xsubbus_recv (struct nn_sockbase *self, struct nn_msg *msg)
 			/* Check the type of the message */
 			op = *((uint8_t*)nn_chunkref_data(&msg->body));
 			if (op == 77) { // 'M'
-				printf("Message of %d bytes\n", rc);
 				return 0;
 			}
 			else {
@@ -245,7 +248,8 @@ int nn_xsubbus_handle_event(struct nn_sockbase *self, struct nn_msg *msg, struct
 
 	uint8_t  op = *((uint8_t*)nn_chunkref_data(&msg->body));
 	char* topic = (char*)(nn_chunkref_data(&msg->body)) + 1;
-	size_t size = nn_chunkref_size(&msg->body) - 1;
+	size_t size = strlen(topic);
+	//size_t size = nn_chunkref_size(&msg->body) - 1;
 
 
 	if (op == 83) { // 'S'
