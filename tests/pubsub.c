@@ -19,70 +19,70 @@
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
 */
-
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <windows.h>
 #include "../src/nn.h"
 #include "../src/pubsub.h"
 
-#include "testutil.h"
+#define SERVER "server"
+#define CLIENT "client"
 
-#define SOCKET_ADDRESS "inproc://a"
-
-int main ()
+char *date()
 {
-    int rc;
-    int pub1;
-    int pub2;
-    int sub1;
-    int sub2;
-    char buf [8];
-    size_t sz;
-
-    pub1 = test_socket (AF_SP, NN_PUB);
-    test_bind (pub1, SOCKET_ADDRESS);
-    sub1 = test_socket (AF_SP, NN_SUB);
-    rc = nn_setsockopt (sub1, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
-    errno_assert (rc == 0);
-    sz = sizeof (buf);
-    rc = nn_getsockopt (sub1, NN_SUB, NN_SUB_SUBSCRIBE, buf, &sz);
-    nn_assert (rc == -1 && nn_errno () == ENOPROTOOPT);
-    test_connect (sub1, SOCKET_ADDRESS);
-    sub2 = test_socket (AF_SP, NN_SUB);
-    rc = nn_setsockopt (sub2, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
-    errno_assert (rc == 0);
-    test_connect (sub2, SOCKET_ADDRESS);
-
-    /*  Wait till connections are established to prevent message loss. */
-    nn_sleep (10);
-
-    test_send (pub1, "0123456789012345678901234567890123456789");
-    test_recv (sub1, "0123456789012345678901234567890123456789");
-    test_recv (sub2, "0123456789012345678901234567890123456789");
-
-    test_close (pub1);
-    test_close (sub1);
-    test_close (sub2);
-
-    /*  Check receiving messages from two publishers. */
-
-    sub1 = test_socket (AF_SP, NN_SUB);
-    rc = nn_setsockopt (sub1, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
-    errno_assert (rc == 0);
-    test_bind (sub1, SOCKET_ADDRESS);
-    pub1 = test_socket (AF_SP, NN_PUB);
-    test_connect (pub1, SOCKET_ADDRESS);
-    pub2 = test_socket (AF_SP, NN_PUB);
-    test_connect (pub2, SOCKET_ADDRESS);
-    nn_sleep (100);
-
-    test_send (pub1, "0123456789012345678901234567890123456789");
-    test_send (pub2, "0123456789012345678901234567890123456789");
-    test_recv (sub1, "0123456789012345678901234567890123456789");
-    test_recv (sub1, "0123456789012345678901234567890123456789");
-
-    test_close (pub2);
-    test_close (pub1);
-    test_close (sub1);
-
-    return 0;
+	time_t raw = time(&raw);
+	struct tm *info = localtime(&raw);
+	char *text = asctime(info);
+	text[strlen(text) - 1] = '\0'; // remove '\n'
+	return text;
 }
 
+int server(const char *url)
+{
+	int sock = nn_socket(AF_SP, NN_PUB);
+	assert(sock >= 0);
+	assert(nn_bind(sock, url) >= 0);
+	while (1)
+	{
+		char *d = date();
+		int sz_d = strlen(d) + 1; // '\0' too
+		printf("SERVER: PUBLISHING DATE %s\n", d);
+		int bytes = nn_send(sock, d, sz_d, 0);
+		assert(bytes == sz_d);
+		Sleep(1000);
+	}
+	return nn_shutdown(sock, 0);
+}
+
+int client(const char *url, const char *name)
+{
+	int sock = nn_socket(AF_SP, NN_SUB);
+	assert(sock >= 0);
+	// TODO learn more about publishing/subscribe keys
+	assert(nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0) >= 0);
+	assert(nn_connect(sock, url) >= 0);
+	while (1)
+	{
+		char *buf = NULL;
+		int bytes = nn_recv(sock, &buf, NN_MSG, 0);
+		assert(bytes >= 0);
+		printf("CLIENT (%s): RECEIVED %s\n", name, buf);
+		nn_freemsg(buf);
+	}
+	return nn_shutdown(sock, 0);
+}
+
+int main(const int argc, const char **argv)
+{
+	if (strncmp(SERVER, argv[1], strlen(SERVER)) == 0 && argc >= 2)
+		return server(argv[2]);
+	else if (strncmp(CLIENT, argv[1], strlen(CLIENT)) == 0 && argc >= 3)
+		return client(argv[2], argv[3]);
+	else
+	{
+		fprintf(stderr, "Usage: pubsub %s|%s <URL> <ARG> ...\n",
+			SERVER, CLIENT);
+		return 1;
+	}
+}
