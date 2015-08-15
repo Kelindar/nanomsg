@@ -37,7 +37,6 @@ set (NN_SOURCES
     pipeline.h
     survey.h
     bus.h
-    subbus.h
 
     core/ep.h
     core/ep.c
@@ -158,15 +157,6 @@ set (NN_SOURCES
     protocols/bus/xbus.h
     protocols/bus/xbus.c
     
-    protocols/subbus/llist.h
-    protocols/subbus/llist.c
-    protocols/subbus/trie.h
-    protocols/subbus/trie.c
-    protocols/subbus/subbus.h
-    protocols/subbus/subbus.c
-    protocols/subbus/xsubbus.h
-    protocols/subbus/xsubbus.c
-
     protocols/pipeline/push.h
     protocols/pipeline/push.c
     protocols/pipeline/pull.h
@@ -187,6 +177,8 @@ set (NN_SOURCES
     protocols/pubsub/sub.c
     protocols/pubsub/trie.h
     protocols/pubsub/trie.c
+    protocols/pubsub/vector.h
+    protocols/pubsub/vector.c
     protocols/pubsub/xpub.h
     protocols/pubsub/xpub.c
     protocols/pubsub/xsub.h

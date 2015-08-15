@@ -25,13 +25,14 @@
 #include <stdio.h>
 
 #include "trie.h"
+#include "vector.h"
 #include "../../utils/alloc.h"
 #include "../../utils/fast.h"
 #include "../../utils/err.h"
 
 /*  Double check that the size of node structure is as small as
     we believe it to be. */
-CT_ASSERT (sizeof (struct nn_trie_node) == 24);
+//CT_ASSERT (sizeof (struct nn_trie_node) == 24);
 
 /*  Forward declarations. */
 static struct nn_trie_node *nn_node_compact (struct nn_trie_node *self);
@@ -233,7 +234,7 @@ struct nn_trie_node *nn_node_compact (struct nn_trie_node *self)
     return ch;
 }
 
-int nn_trie_subscribe (struct nn_trie *self, const uint8_t *data, size_t size)
+int nn_trie_subscribe (struct nn_trie *self, struct nn_pipe *pipe, const uint8_t *data, size_t size)
 {
     int i;
     struct nn_trie_node **node;
@@ -288,7 +289,7 @@ step2:
 
     ch = *node;
     *node = nn_alloc (sizeof (struct nn_trie_node) +
-        sizeof (struct nn_trie_node*), "trie node");
+        sizeof (struct nn_trie_node*), "xtrie node");
     assert (*node);
     (*node)->refcount = 0;
     (*node)->prefix_len = pos;
@@ -377,7 +378,7 @@ step3:
         old_node = *node;
         *node = (struct nn_trie_node*) nn_alloc (sizeof (struct nn_trie_node) +
             (new_max - new_min + 1) * sizeof (struct nn_trie_node*),
-            "trie node");
+            "xtrie node");
         assert (*node);
 
         /*  Fill in the new node. */
@@ -410,7 +411,7 @@ step4:
         /*  Create a new node to hold the next part of the subscription. */
         more_nodes = size > NN_TRIE_PREFIX_MAX;
         *node = nn_alloc (sizeof (struct nn_trie_node) +
-            (more_nodes ? sizeof (struct nn_trie_node*) : 0), "trie node");
+            (more_nodes ? sizeof (struct nn_trie_node*) : 0), "xtrie node");
         assert (*node);
 
         /*  Fill in the new node. */
@@ -432,13 +433,17 @@ step4:
     /*  Step 5 -- Create the subscription as such. */
 step5:
 
-    ++(*node)->refcount;
+	if (++(*node)->refcount == 1) {
+		nn_vector_init(&(*node)->subscribers);
+	}
+    
+	nn_vector_add(&(*node)->subscribers, pipe);
 
     /*  Return 1 in case of a fresh subscription. */
     return (*node)->refcount == 1 ? 1 : 0;
 }
 
-int nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size)
+struct nn_vector* nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size)
 {
     struct nn_trie_node *node;
     struct nn_trie_node **tmp;
@@ -446,14 +451,14 @@ int nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size)
     node = self->root;
     while (1) {
 
-        /*  If we are at the end of the trie, return. */
+        /*  If we are at the end of the xtrie, return. */
         if (!node)
-            return 0;
+            return NULL;
 
         /*  Check whether whole prefix matches the data. If not so,
             the whole string won't match. */
         if (nn_node_check_prefix (node, data, size) != node->prefix_len)
-            return 0;
+            return NULL;
 
         /*  Skip the prefix. */
         data += node->prefix_len;
@@ -461,7 +466,7 @@ int nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size)
 
         /*  If all the data are matched, return. */
         if (nn_node_has_subscribers (node))
-            return 1;
+            return &node->subscribers;
 
         /*  Move to the next node. */
         tmp = nn_node_next (node, *data);
@@ -471,13 +476,12 @@ int nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size)
     }
 }
 
-int nn_trie_unsubscribe (struct nn_trie *self, const uint8_t *data, size_t size)
+int nn_trie_unsubscribe (struct nn_trie *self, struct nn_pipe *pipe,  const uint8_t *data, size_t size)
 {
-    return nn_node_unsubscribe (&self->root, data, size);
+    return nn_node_unsubscribe (&self->root, pipe, data, size);
 }
 
-static int nn_node_unsubscribe (struct nn_trie_node **self,
-    const uint8_t *data, size_t size)
+static int nn_node_unsubscribe (struct nn_trie_node **self, struct nn_pipe *pipe, const uint8_t *data, size_t size)
 {
     int i;
     int j;
@@ -506,14 +510,14 @@ static int nn_node_unsubscribe (struct nn_trie_node **self,
     if (!ch)
         return 0; /*  TODO: This should be an error. */
 
-    /*  Recursive traversal of the trie happens here. If the subscription
-        wasn't really removed, nothing have changed in the trie and
+    /*  Recursive traversal of the xtrie happens here. If the subscription
+        wasn't really removed, nothing have changed in the xtrie and
         no additional pruning is needed. */
-    if (nn_node_unsubscribe (ch, data + 1, size - 1) == 0)
+    if (nn_node_unsubscribe (ch, pipe, data + 1, size - 1) == 0)
         return 0;
 
     /*  Subscription removal is already done. Now we are going to compact
-        the trie. However, if the following node remains in place, there's
+        the xtrie. However, if the following node remains in place, there's
         nothing to compact here. */
     if (*ch)
         return 1;
@@ -604,7 +608,7 @@ static int nn_node_unsubscribe (struct nn_trie_node **self,
     /*  Convert dense array into sparse array. */
     {
         new_node = nn_alloc (sizeof (struct nn_trie_node) +
-            NN_TRIE_SPARSE_MAX * sizeof (struct nn_trie_node*), "trie node");
+            NN_TRIE_SPARSE_MAX * sizeof (struct nn_trie_node*), "xtrie node");
         assert (new_node);
         new_node->refcount = 0;
         new_node->prefix_len = (*self)->prefix_len;
@@ -637,9 +641,14 @@ found:
     /*  Subscription exists. Unsubscribe. */
     --(*self)->refcount;
 
+	nn_vector_remove(&(*self)->subscribers, pipe);
+
     /*  If reference count has dropped to zero we can try to compact
         the node. */
     if (!(*self)->refcount) {
+
+		/* remove the distributor */
+		nn_vector_free(&(*self)->subscribers);
 
         /*  If there are no children, we can delete the node altogether. */
         if (!(*self)->type) {

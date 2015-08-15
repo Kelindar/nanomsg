@@ -69,8 +69,6 @@
 #include "../protocols/survey/xsurveyor.h"
 #include "../protocols/bus/bus.h"
 #include "../protocols/bus/xbus.h"
-#include "../protocols/subbus/subbus.h"
-#include "../protocols/subbus/xsubbus.h"
 
 #include "../pubsub.h"
 #include "../pipeline.h"
@@ -287,8 +285,6 @@ static void nn_global_init (void)
     nn_global_add_socktype (nn_xsurveyor_socktype);
     nn_global_add_socktype (nn_bus_socktype);
     nn_global_add_socktype (nn_xbus_socktype);
-    nn_global_add_socktype (nn_subbus_socktype);
-    nn_global_add_socktype (nn_xsubbus_socktype);
 
     /*  Start the worker threads. */
     nn_pool_init (&self.pool);

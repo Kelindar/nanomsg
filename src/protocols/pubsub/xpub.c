@@ -21,10 +21,12 @@
 */
 
 #include "xpub.h"
+#include "trie.h"
 
 #include "../../nn.h"
 #include "../../pubsub.h"
 
+#include "../utils/fq.h"
 #include "../utils/dist.h"
 
 #include "../../utils/err.h"
@@ -37,16 +39,15 @@
 #include <stddef.h>
 
 struct nn_xpub_data {
-    struct nn_dist_data item;
+	struct nn_fq_data in_item;
+    struct nn_dist_data out_item;
 };
 
 struct nn_xpub {
-
-    /*  The generic socket base class. */
     struct nn_sockbase sockbase;
-
-    /*  Distributor. */
-    struct nn_dist outpipes;
+    struct nn_fq in_pipes;
+    struct nn_dist out_pipes;
+	struct nn_trie trie;
 };
 
 /*  Private functions. */
@@ -62,6 +63,7 @@ static void nn_xpub_in (struct nn_sockbase *self, struct nn_pipe *pipe);
 static void nn_xpub_out (struct nn_sockbase *self, struct nn_pipe *pipe);
 static int nn_xpub_events (struct nn_sockbase *self);
 static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg);
+static int nn_xpub_recv (struct nn_sockbase *self, struct nn_msg *msg);
 static int nn_xpub_setopt (struct nn_sockbase *self, int level, int option,
     const void *optval, size_t optvallen);
 static int nn_xpub_getopt (struct nn_sockbase *self, int level, int option,
@@ -75,7 +77,7 @@ static const struct nn_sockbase_vfptr nn_xpub_sockbase_vfptr = {
     nn_xpub_out,
     nn_xpub_events,
     nn_xpub_send,
-    NULL,
+    nn_xpub_recv,
     nn_xpub_setopt,
     nn_xpub_getopt
 };
@@ -84,12 +86,14 @@ static void nn_xpub_init (struct nn_xpub *self,
     const struct nn_sockbase_vfptr *vfptr, void *hint)
 {
     nn_sockbase_init (&self->sockbase, vfptr, hint);
-    nn_dist_init (&self->outpipes);
+    nn_dist_init (&self->out_pipes);
+	nn_fq_init(&self->in_pipes);
 }
 
 static void nn_xpub_term (struct nn_xpub *self)
 {
-    nn_dist_term (&self->outpipes);
+	nn_fq_term(&self->in_pipes);
+    nn_dist_term (&self->out_pipes);
     nn_sockbase_term (&self->sockbase);
 }
 
@@ -107,12 +111,20 @@ static int nn_xpub_add (struct nn_sockbase *self, struct nn_pipe *pipe)
 {
     struct nn_xpub *xpub;
     struct nn_xpub_data *data;
+	int rcvprio;
+	size_t sz;
 
     xpub = nn_cont (self, struct nn_xpub, sockbase);
 
+	sz = sizeof(rcvprio);
+	nn_pipe_getopt(pipe, NN_SOL_SOCKET, NN_RCVPRIO, &rcvprio, &sz);
+	nn_assert(sz == sizeof(rcvprio));
+	nn_assert(rcvprio >= 1 && rcvprio <= 16);
+
     data = nn_alloc (sizeof (struct nn_xpub_data), "pipe data (pub)");
     alloc_assert (data);
-    nn_dist_add (&xpub->outpipes, &data->item, pipe);
+    nn_dist_add (&xpub->out_pipes, &data->out_item, pipe);
+	nn_fq_add(&xpub->in_pipes, &data->in_item, pipe, rcvprio);
     nn_pipe_setdata (pipe, data);
 
     return 0;
@@ -126,16 +138,20 @@ static void nn_xpub_rm (struct nn_sockbase *self, struct nn_pipe *pipe)
     xpub = nn_cont (self, struct nn_xpub, sockbase);
     data = nn_pipe_getdata (pipe);
 
-    nn_dist_rm (&xpub->outpipes, &data->item);
-
+    nn_dist_rm (&xpub->out_pipes, &data->out_item);
+	nn_fq_rm(&xpub->in_pipes, &data->in_item);
     nn_free (data);
 }
 
 static void nn_xpub_in (NN_UNUSED struct nn_sockbase *self,
                        NN_UNUSED struct nn_pipe *pipe)
 {
-    /*  We shouldn't get any messages from subscribers. */
-    nn_assert (0);
+	struct nn_xpub *xpub;
+	struct nn_xpub_data *data;
+
+	xpub = nn_cont(self, struct nn_xpub, sockbase);
+	data = nn_pipe_getdata(pipe);
+	nn_fq_in(&xpub->in_pipes, &data->in_item);
 }
 
 static void nn_xpub_out (struct nn_sockbase *self, struct nn_pipe *pipe)
@@ -146,7 +162,7 @@ static void nn_xpub_out (struct nn_sockbase *self, struct nn_pipe *pipe)
     xpub = nn_cont (self, struct nn_xpub, sockbase);
     data = nn_pipe_getdata (pipe);
 
-    nn_dist_out (&xpub->outpipes, &data->item);
+    nn_dist_out (&xpub->out_pipes, &data->out_item);
 }
 
 static int nn_xpub_events (NN_UNUSED struct nn_sockbase *self)
@@ -156,8 +172,103 @@ static int nn_xpub_events (NN_UNUSED struct nn_sockbase *self)
 
 static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 {
-    return nn_dist_send (&nn_cont (self, struct nn_xpub, sockbase)->outpipes,
+    return nn_dist_send (&nn_cont (self, struct nn_xpub, sockbase)->out_pipes,
         msg, NULL);
+}
+
+static int nn_xpub_recv (struct nn_sockbase *self, struct nn_msg *msg)
+{
+    int rc;
+    struct nn_xpub *xpub;
+    struct nn_pipe *pipe;
+	uint8_t op;
+
+    xpub = nn_cont (self, struct nn_xpub, sockbase);
+    while (1) {
+
+        // Get next message in fair-queued manner. 
+        rc = nn_fq_recv (&xpub->in_pipes, msg, &pipe);
+        if (nn_slow (rc < 0))
+            return rc;
+
+		//  The message should have no header. Drop malformed messages.
+		if (nn_chunkref_size(&msg->sphdr) == 0) {
+
+			// Check the type of the message
+			op = *((uint8_t*)nn_chunkref_data(&msg->body));
+			if (op == 77) { // 'M'
+				return 0;
+			}
+			else {
+				// This is a system event, handle differently
+				nn_xpub_handle_event(self, msg, pipe);
+				nn_msg_term(msg);
+				continue;
+			}
+		}
+
+		// Drop malformed messages
+        nn_msg_term (msg);
+    }
+
+	return 0;
+}
+
+static int nn_xpub_handle_event(struct nn_sockbase *self, struct nn_msg *msg, struct nn_pipe *pipe)
+{
+	/*  The message should have no header. Drop malformed messages. */
+	if (nn_chunkref_size(&msg->sphdr) != 0)		
+		nn_msg_term(msg);
+
+	uint8_t  op = *((uint8_t*)nn_chunkref_data(&msg->body));
+	char* topic = (char*)(nn_chunkref_data(&msg->body)) + 1;
+	size_t size = strlen(topic);
+	//size_t size = nn_chunkref_size(&msg->body) - 1;
+
+
+	if (op == 83) { // 'S'
+		printf("SUBSCRIBE %d on '%s' \n", pipe, topic);
+		nn_xpub_subscribe(self, pipe, topic, size);
+	}
+
+	if (op == 85) { // 'U'
+		printf("UNSUBSCRIBE %d on '%s' \n", pipe, topic);
+		nn_xpub_unsubscribe(self, pipe, topic, size);
+	}
+
+
+	/*  Add pipe ID to the message header. */
+	nn_chunkref_term(&msg->sphdr);
+	nn_chunkref_init(&msg->sphdr, sizeof(uint64_t));
+	memset(nn_chunkref_data(&msg->sphdr), 0, sizeof(uint64_t));
+	memcpy(nn_chunkref_data(&msg->sphdr), &pipe, sizeof(pipe));
+
+	return 0;
+}
+
+
+static int nn_xpub_subscribe(struct nn_sockbase *self, struct nn_pipe *pipe, const void *subval, size_t subvallen)
+{
+	int rc;
+	struct nn_xpub *xpub;
+
+	xpub = nn_cont(self, struct nn_xpub, sockbase);
+	rc = nn_trie_subscribe(&xpub->trie, pipe, subval, subvallen);
+	if (rc >= 0)
+		return 0;
+	return rc;
+}
+
+static int nn_xpub_unsubscribe(struct nn_sockbase *self, struct nn_pipe *pipe, const void *subval, size_t subvallen)
+{
+	int rc;
+	struct nn_xpub *xpub;
+
+	xpub = nn_cont(self, struct nn_xpub, sockbase);
+	rc = nn_trie_unsubscribe(&xpub->trie, pipe, subval, subvallen);
+	if (rc >= 0)
+		return 0;
+	return rc;
 }
 
 static int nn_xpub_setopt (NN_UNUSED struct nn_sockbase *self,

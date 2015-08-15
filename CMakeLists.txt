@@ -80,7 +80,6 @@ add_libnanomsg_test (reqrep)
 add_libnanomsg_test (pipeline)
 add_libnanomsg_test (survey)
 add_libnanomsg_test (bus)
-add_libnanomsg_test (subbus)
 
 #  Feature tests.
 add_libnanomsg_test (block)
@@ -129,7 +128,6 @@ install (FILES src/reqrep.h DESTINATION include/nanomsg)
 install (FILES src/pipeline.h DESTINATION include/nanomsg)
 install (FILES src/survey.h DESTINATION include/nanomsg)
 install (FILES src/bus.h DESTINATION include/nanomsg)
-install (FILES src/subbus.h DESTINATION include/nanomsg)
 
 install (TARGETS nanocat RUNTIME DESTINATION bin)
 

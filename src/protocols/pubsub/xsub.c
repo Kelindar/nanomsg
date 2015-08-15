@@ -22,12 +22,12 @@
 */
 
 #include "xsub.h"
-#include "trie.h"
 
 #include "../../nn.h"
 #include "../../pubsub.h"
 
 #include "../utils/fq.h"
+#include "../utils/dist.h"
 
 #include "../../utils/err.h"
 #include "../../utils/cont.h"
@@ -37,13 +37,14 @@
 #include "../../utils/attr.h"
 
 struct nn_xsub_data {
-    struct nn_fq_data fq;
+    struct nn_fq_data in_item;
+    struct nn_dist_data out_item;
 };
 
 struct nn_xsub {
     struct nn_sockbase sockbase;
-    struct nn_fq fq;
-    struct nn_trie trie;
+    struct nn_fq in_pipes;
+    struct nn_dist out_pipes;
 };
 
 /*  Private functions. */
@@ -58,9 +59,9 @@ static void nn_xsub_rm (struct nn_sockbase *self, struct nn_pipe *pipe);
 static void nn_xsub_in (struct nn_sockbase *self, struct nn_pipe *pipe);
 static void nn_xsub_out (struct nn_sockbase *self, struct nn_pipe *pipe);
 static int nn_xsub_events (struct nn_sockbase *self);
+static int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg);
 static int nn_xsub_recv (struct nn_sockbase *self, struct nn_msg *msg);
-static int nn_xsub_setopt (struct nn_sockbase *self, int level, int option,
-    const void *optval, size_t optvallen);
+static int nn_xsub_setopt (struct nn_sockbase *self, int level, int option, const void *optval, size_t optvallen);
 static int nn_xsub_getopt (struct nn_sockbase *self, int level, int option,
     void *optval, size_t *optvallen);
 static const struct nn_sockbase_vfptr nn_xsub_sockbase_vfptr = {
@@ -71,7 +72,7 @@ static const struct nn_sockbase_vfptr nn_xsub_sockbase_vfptr = {
     nn_xsub_in,
     nn_xsub_out,
     nn_xsub_events,
-    NULL,
+	nn_xsub_send,
     nn_xsub_recv,
     nn_xsub_setopt,
     nn_xsub_getopt
@@ -81,14 +82,14 @@ static void nn_xsub_init (struct nn_xsub *self,
     const struct nn_sockbase_vfptr *vfptr, void *hint)
 {
     nn_sockbase_init (&self->sockbase, vfptr, hint);
-    nn_fq_init (&self->fq);
-    nn_trie_init (&self->trie);
+    nn_fq_init (&self->in_pipes);
+    nn_dist_init (&self->out_pipes);
 }
 
 static void nn_xsub_term (struct nn_xsub *self)
 {
-    nn_trie_term (&self->trie);
-    nn_fq_term (&self->fq);
+    nn_dist_term (&self->out_pipes);
+    nn_fq_term (&self->in_pipes);
     nn_sockbase_term (&self->sockbase);
 }
 
@@ -119,7 +120,8 @@ static int nn_xsub_add (struct nn_sockbase *self, struct nn_pipe *pipe)
     data = nn_alloc (sizeof (struct nn_xsub_data), "pipe data (sub)");
     alloc_assert (data);
     nn_pipe_setdata (pipe, data);
-    nn_fq_add (&xsub->fq, &data->fq, pipe, rcvprio);
+    nn_fq_add (&xsub->in_pipes, &data->in_item, pipe, rcvprio);
+    nn_dist_add (&xsub->out_pipes, &data->out_item, pipe);
 
     return 0;
 }
@@ -131,7 +133,8 @@ static void nn_xsub_rm (struct nn_sockbase *self, struct nn_pipe *pipe)
 
     xsub = nn_cont (self, struct nn_xsub, sockbase);
     data = nn_pipe_getdata (pipe);
-    nn_fq_rm (&xsub->fq, &data->fq);
+    nn_fq_rm (&xsub->in_pipes, &data->in_item);
+    nn_dist_rm (&xsub->out_pipes, &data->out_item);
     nn_free (data);
 }
 
@@ -142,21 +145,44 @@ static void nn_xsub_in (struct nn_sockbase *self, struct nn_pipe *pipe)
 
     xsub = nn_cont (self, struct nn_xsub, sockbase);
     data = nn_pipe_getdata (pipe);
-    nn_fq_in (&xsub->fq, &data->fq);
+    nn_fq_in (&xsub->in_pipes, &data->in_item);
 }
 
 static void nn_xsub_out (NN_UNUSED struct nn_sockbase *self,
     NN_UNUSED struct nn_pipe *pipe)
 {
-    /*  We are not going to send any messages until subscription forwarding
-        is implemented, so there's no point is maintaining a list of pipes
-        ready for sending. */
+    struct nn_xsub *xsub;
+    struct nn_xsub_data *data;
+
+    xsub = nn_cont (self, struct nn_xsub, sockbase);
+    data = nn_pipe_getdata (pipe);
+
+    nn_dist_out (&xsub->out_pipes, &data->out_item);
 }
 
 static int nn_xsub_events (struct nn_sockbase *self)
 {
-    return nn_fq_can_recv (&nn_cont (self, struct nn_xsub, sockbase)->fq) ?
+    return nn_fq_can_recv (&nn_cont (self, struct nn_xsub, sockbase)->in_pipes) ?
         NN_SOCKBASE_EVENT_IN : 0;
+}
+
+int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
+{
+	size_t hdrsz;
+	struct nn_pipe *exclude;
+
+	hdrsz = nn_chunkref_size(&msg->sphdr);
+	if (hdrsz == 0)
+		exclude = NULL;
+	else if (hdrsz == sizeof(uint64_t)) {
+		memcpy(&exclude, nn_chunkref_data(&msg->sphdr), sizeof(exclude));
+		nn_chunkref_term(&msg->sphdr);
+		nn_chunkref_init(&msg->sphdr, 0);
+	}
+	else
+		return -EINVAL;
+
+	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, exclude);
 }
 
 static int nn_xsub_recv (struct nn_sockbase *self, struct nn_msg *msg)
@@ -164,24 +190,14 @@ static int nn_xsub_recv (struct nn_sockbase *self, struct nn_msg *msg)
     int rc;
     struct nn_xsub *xsub;
 
+    /*  Loop until there are no more messages to receive. */
     xsub = nn_cont (self, struct nn_xsub, sockbase);
-
-    /*  Loop while a matching message is found or when there are no more
-        messages to receive. */
     while (1) {
-        rc = nn_fq_recv (&xsub->fq, msg, NULL);
+        rc = nn_fq_recv (&xsub->in_pipes, msg, NULL);
         if (nn_slow (rc == -EAGAIN))
             return -EAGAIN;
         errnum_assert (rc >= 0, -rc);
-        rc = nn_trie_match (&xsub->trie, nn_chunkref_data (&msg->body),
-            nn_chunkref_size (&msg->body));
-        if (rc == 0) {
-            nn_msg_term (msg);
-            continue;
-        }
-        if (rc == 1)
-            return 0;
-        errnum_assert (0, -rc);
+        return 0;
     }
 }
 
@@ -196,7 +212,7 @@ static int nn_xsub_setopt (struct nn_sockbase *self, int level, int option,
     if (level != NN_SUB)
         return -ENOPROTOOPT;
 
-    if (option == NN_SUB_SUBSCRIBE) {
+    /*if (option == NN_SUB_SUBSCRIBE) {
         rc = nn_trie_subscribe (&xsub->trie, optval, optvallen);
         if (rc >= 0)
             return 0;
@@ -210,7 +226,8 @@ static int nn_xsub_setopt (struct nn_sockbase *self, int level, int option,
         return rc;
     }
 
-    return -ENOPROTOOPT;
+    return -ENOPROTOOPT;*/
+    return 0;
 }
 
 static int nn_xsub_getopt (NN_UNUSED struct nn_sockbase *self,
