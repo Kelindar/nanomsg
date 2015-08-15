@@ -68,6 +68,7 @@ static int nn_xpub_setopt (struct nn_sockbase *self, int level, int option, cons
 static int nn_xpub_getopt (struct nn_sockbase *self, int level, int option, void *optval, size_t *optvallen);
 static int nn_xpub_subscribe(struct nn_sockbase *self, struct nn_trie *trie, const void *subval, size_t subvallen);
 static int nn_xpub_unsubscribe(struct nn_sockbase *self, struct nn_trie *trie, const void *subval, size_t subvallen);
+static int nn_xpub_handle_event(struct nn_sockbase *self, struct nn_msg *msg, struct nn_pipe *pipe);
 static const struct nn_sockbase_vfptr nn_xpub_sockbase_vfptr = {
     NULL,
     nn_xpub_destroy,

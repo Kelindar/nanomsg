@@ -196,8 +196,6 @@ PROTOCOLS_PUBSUB = \
     src/protocols/pubsub/sub.c \
     src/protocols/pubsub/trie.h \
     src/protocols/pubsub/trie.c \
-    src/protocols/pubsub/vector.h \
-    src/protocols/pubsub/vector.c \
     src/protocols/pubsub/xpub.h \
     src/protocols/pubsub/xpub.c \
     src/protocols/pubsub/xsub.h \
