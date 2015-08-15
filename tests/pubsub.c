@@ -72,6 +72,8 @@ int client(const char *url, const char *name)
 	assert(nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0) >= 0);
 	assert(nn_connect(sock, url) >= 0);
 
+	Sleep(1000);
+
 	// Subscribe on start
 	char d[] = "Shello.";
 	int sz_d = strlen(&d) + 1; // '\0' too

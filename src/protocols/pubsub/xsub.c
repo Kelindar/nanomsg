@@ -162,13 +162,16 @@ static void nn_xsub_out (NN_UNUSED struct nn_sockbase *self,
 
 static int nn_xsub_events (struct nn_sockbase *self)
 {
-    return nn_fq_can_recv (&nn_cont (self, struct nn_xsub, sockbase)->in_pipes) ?
-        NN_SOCKBASE_EVENT_IN : 0;
+	struct nn_xsub* sock;
+	sock = nn_cont(self, struct nn_xsub, sockbase);
+	return (nn_fq_can_recv(&sock->in_pipes) ? NN_SOCKBASE_EVENT_IN : 0) |
+		(nn_lb_can_send(&sock->out_pipes) ? NN_SOCKBASE_EVENT_OUT : 0);
 }
 
-int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
+static int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
 {
-	printf("Sending %d bytes", nn_chunk_size(&msg->body));
+	//printf("Sending %d bytes", nn_chunk_size(&msg->body));
+	printf("Sending ");
 	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, NULL);
 }
 

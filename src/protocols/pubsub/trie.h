@@ -24,7 +24,6 @@
 #define NN_TRIE_INCLUDED
 
 #include "../../utils/int.h"
-#include "vector.h"
 
 #include <stddef.h>
 
@@ -58,10 +57,6 @@ struct nn_trie_node
         all but the last one are stored as a 'prefix'. */
     uint8_t prefix_len;
     uint8_t prefix [NN_TRIE_PREFIX_MAX];
-    
-    /*  The list of the subscriber pipes for the current leaf. We are using the
-        nn_dist structure so we can distribute fairly. */
-    struct nn_vector subscribers;
 
     /*  The array of characters pointing to individual children of the node.
         Actual pointers to child nodes are stored in the memory following
@@ -106,19 +101,19 @@ void nn_trie_term (struct nn_trie *self);
 /*  Add the string to the trie. If the string is not yet there, 1 is returned.
     If it already exists in the trie, its reference count is incremented and
     0 is returned. */
-int nn_trie_subscribe (struct nn_trie *self, struct nn_pipe *pipe, const uint8_t *data, size_t size);
+int nn_trie_subscribe (struct nn_trie *self, const uint8_t *data, size_t size);
 
 /*  Remove the string from the trie. If the string was actually removed,
     1 is returned. If reference count was decremented without falling to zero,
     0 is returned. */
-int nn_trie_unsubscribe (struct nn_trie *self, struct nn_pipe *pipe, const uint8_t *data, size_t size);
+int nn_trie_unsubscribe (struct nn_trie *self, const uint8_t *data,
+    size_t size);
 
 /*  Checks the supplied string. If it matches it returns 1, if it does not
     it returns 0. */
-struct nn_vector* nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size);
+int nn_trie_match (struct nn_trie *self, const uint8_t *data, size_t size);
 
 /*  Debugging interface. */
 void nn_trie_dump (struct nn_trie *self);
 
 #endif
-

@@ -18,7 +18,7 @@ void nn_vector_init(struct nn_vector *vector) {
 	vector->data = malloc(sizeof(int) * vector->capacity);
 }
 
-void nn_vector_add(struct nn_vector *vector, struct nn_pipe* value) {
+void nn_vector_add(struct nn_vector *vector, struct nn_dist_data* value) {
 	// Try to find the pipe first or an empty slot
 	int slot = -1;
 	for (int i = 0; i < vector->size; ++i) {
@@ -43,7 +43,7 @@ void nn_vector_add(struct nn_vector *vector, struct nn_pipe* value) {
 	}
 }
 
-void nn_vector_remove(struct nn_vector *vector, struct nn_pipe* value) {
+void nn_vector_remove(struct nn_vector *vector, struct nn_dist_data* value) {
 	for (int i = 0; i < vector->size; ++i) {
 		if (vector->data[i] == value) {
 			vector->data[i] = NULL;
@@ -57,7 +57,7 @@ void nn_vector_remove_at(struct nn_vector *vector, int index){
 	vector->data[index] = NULL;
 }
 
-struct nn_pipe* nn_vector_get(struct nn_vector *vector, int index) {
+struct nn_dist_data* nn_vector_get(struct nn_vector *vector, int index) {
 	if (index >= vector->size || index < 0) {
 		printf("Index %d out of bounds for vector of size %d\n", index, vector->size);
 		exit(1);
@@ -77,11 +77,11 @@ void nn_vector_free(struct nn_vector *self) {
 	free(self->data);
 }
 
-int nn_vector_send(struct nn_vector *self, struct nn_msg *msg, struct nn_pipe *exclude)
+int nn_vector_send(struct nn_vector *self, struct nn_msg *msg, struct nn_dist_data *exclude)
 {
 	int rc;
 	int subcount, i;
-	struct nn_pipe *pipe;
+	struct nn_dist_data *data;
 	struct nn_msg copy;
 
 	/*  TODO: We can optimise for the case when there's only one outbound
@@ -98,21 +98,20 @@ int nn_vector_send(struct nn_vector *self, struct nn_msg *msg, struct nn_pipe *e
 	nn_msg_bulkcopy_start(msg, self->count);
 	subcount = self->size;
 	for (i = 0; i < subcount; ++i) {
-		pipe = self->data[i];
-		if (pipe == NULL)
+		data = self->data[i];
+		if (data == NULL || data->pipe == NULL || (data->item.prev == NULL && data->item.next == NULL))
 			continue;
 
 		nn_msg_bulkcopy_cp(&copy, msg);
-		if (nn_fast(pipe == exclude)) {
+		if (nn_fast(data->pipe == exclude)) {
 			nn_msg_term(&copy);
 		}
 		else {
-			rc = nn_pipe_send(pipe, &copy);
+			rc = nn_pipe_send(data->pipe, &copy);
 			errnum_assert(rc >= 0, -rc);
 			if (rc & NN_PIPE_RELEASE) {
 				--self->count;
 				nn_vector_remove_at(self, i);
-				//it = nn_list_erase (&self->pipes, it);
 				continue;
 			}
 		}
