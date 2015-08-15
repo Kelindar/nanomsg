@@ -170,6 +170,7 @@ static int nn_xsub_events (struct nn_sockbase *self)
 
 static int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
 {
+	//printf("send: %d bytes: %s\n", nn_chunkref_size(&msg->body), nn_chunkref_data(&msg->body));
 	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, NULL);
 }
 
@@ -192,29 +193,6 @@ static int nn_xsub_recv (struct nn_sockbase *self, struct nn_msg *msg)
 static int nn_xsub_setopt (struct nn_sockbase *self, int level, int option,
         const void *optval, size_t optvallen)
 {
-    int rc;
-    struct nn_xsub *xsub;
-
-    xsub = nn_cont (self, struct nn_xsub, sockbase);
-
-    if (level != NN_SUB)
-        return -ENOPROTOOPT;
-
-    /*if (option == NN_SUB_SUBSCRIBE) {
-        rc = nn_trie_subscribe (&xsub->trie, optval, optvallen);
-        if (rc >= 0)
-            return 0;
-        return rc;
-    }
-
-    if (option == NN_SUB_UNSUBSCRIBE) {
-        rc = nn_trie_unsubscribe (&xsub->trie, optval, optvallen);
-        if (rc >= 0)
-            return 0;
-        return rc;
-    }
-
-    return -ENOPROTOOPT;*/
     return 0;
 }
 
