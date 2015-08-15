@@ -172,8 +172,32 @@ static int nn_xpub_events (NN_UNUSED struct nn_sockbase *self)
 
 static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 {
-    return nn_dist_send (&nn_cont (self, struct nn_xpub, sockbase)->out_pipes,
-        msg, NULL);
+	struct nn_vector* subscribers;
+	struct nn_xpub *xpub;
+	char op;
+	
+	// Get the message header
+	op = *((char*)nn_chunkref_data(&msg->body));
+
+	// Messages are prefixed with operation type 'M'
+	if (op == 'M') {
+
+		// Match the message and retrieve the list of subscribers to send the message to
+		xpub = nn_cont(self, struct nn_xpub, sockbase);
+		subscribers = nn_trie_match(&xpub->trie, (uint8_t*)nn_chunkref_data(&msg->body) + 1, nn_chunkref_size(&msg->body) - 1);
+		if (subscribers == NULL) {
+			nn_msg_term(msg);
+			return 0;
+		}
+
+		// Send the message to the list of subscribers
+		return nn_vector_send(subscribers, msg, NULL);
+	}
+	else {
+		// Other event types are broadcasted through the network
+		return nn_dist_send(&nn_cont(self, struct nn_xpub, sockbase)->out_pipes, msg, NULL);;
+	}
+
 }
 
 static int nn_xpub_recv (struct nn_sockbase *self, struct nn_msg *msg)
