@@ -30,7 +30,7 @@
 static struct nn_socktype nn_pub_socktype_struct = {
     AF_SP,
     NN_PUB,
-    NN_SOCKTYPE_FLAG_NORECV,
+    0,
     nn_xpub_create,
     nn_xpub_ispeer,
     NN_LIST_ITEM_INITIALIZER

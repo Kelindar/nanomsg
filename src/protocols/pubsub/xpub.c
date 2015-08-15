@@ -86,6 +86,7 @@ static void nn_xpub_init (struct nn_xpub *self,
     const struct nn_sockbase_vfptr *vfptr, void *hint)
 {
     nn_sockbase_init (&self->sockbase, vfptr, hint);
+	nn_trie_init(&self->trie);
     nn_dist_init (&self->out_pipes);
 	nn_fq_init(&self->in_pipes);
 }
@@ -94,6 +95,7 @@ static void nn_xpub_term (struct nn_xpub *self)
 {
 	nn_fq_term(&self->in_pipes);
     nn_dist_term (&self->out_pipes);
+	nn_trie_term(&self->trie);
     nn_sockbase_term (&self->sockbase);
 }
 
@@ -214,6 +216,8 @@ static int nn_xpub_recv (struct nn_sockbase *self, struct nn_msg *msg)
         rc = nn_fq_recv (&xpub->in_pipes, msg, &pipe);
         if (nn_slow (rc < 0))
             return rc;
+
+		printf("Received %d bytes", nn_chunkref_size(&msg->body));
 
 		//  The message should have no header. Drop malformed messages.
 		if (nn_chunkref_size(&msg->sphdr) == 0) {

@@ -168,21 +168,8 @@ static int nn_xsub_events (struct nn_sockbase *self)
 
 int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
 {
-	size_t hdrsz;
-	struct nn_pipe *exclude;
-
-	hdrsz = nn_chunkref_size(&msg->sphdr);
-	if (hdrsz == 0)
-		exclude = NULL;
-	else if (hdrsz == sizeof(uint64_t)) {
-		memcpy(&exclude, nn_chunkref_data(&msg->sphdr), sizeof(exclude));
-		nn_chunkref_term(&msg->sphdr);
-		nn_chunkref_init(&msg->sphdr, 0);
-	}
-	else
-		return -EINVAL;
-
-	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, exclude);
+	printf("Sending %d bytes", nn_chunk_size(&msg->body));
+	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, NULL);
 }
 
 static int nn_xsub_recv (struct nn_sockbase *self, struct nn_msg *msg)

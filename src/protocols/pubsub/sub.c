@@ -30,7 +30,7 @@
 static struct nn_socktype nn_sub_socktype_struct = {
     AF_SP,
     NN_SUB,
-    NN_SOCKTYPE_FLAG_NOSEND,
+    0,
     nn_xsub_create,
     nn_xsub_ispeer,
     NN_LIST_ITEM_INITIALIZER

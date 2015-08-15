@@ -43,13 +43,22 @@ int server(const char *url)
 	int sock = nn_socket(AF_SP, NN_PUB);
 	assert(sock >= 0);
 	assert(nn_bind(sock, url) >= 0);
+
+	char d[] = "Mhello.world";
+	int sz_d = strlen(&d) + 1; // '\0' too
+
 	while (1)
 	{
-		char *d = date();
-		int sz_d = strlen(d) + 1; // '\0' too
-		printf("SERVER: PUBLISHING DATE %s\n", d);
-		int bytes = nn_send(sock, d, sz_d, 0);
+		//char *d = date();
+		//int sz_d = strlen(d) + 1; // '\0' too
+		//printf("SERVER: PUBLISHING DATE %s\n", d);
+		printf("SERVER: PUBLISHING '%s'\n", d);
+		int bytes = nn_send(sock, &d, sz_d, 0);
 		assert(bytes == sz_d);
+
+		// Receive and wait
+		char *buf = NULL;
+		nn_recv(sock, &buf, NN_MSG, NN_DONTWAIT);
 		Sleep(1000);
 	}
 	return nn_shutdown(sock, 0);
@@ -62,6 +71,12 @@ int client(const char *url, const char *name)
 	// TODO learn more about publishing/subscribe keys
 	assert(nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0) >= 0);
 	assert(nn_connect(sock, url) >= 0);
+
+	// Subscribe on start
+	char d[] = "Shello.";
+	int sz_d = strlen(&d) + 1; // '\0' too
+	nn_send(sock, &d, sz_d, 0);
+
 	while (1)
 	{
 		char *buf = NULL;
