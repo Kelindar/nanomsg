@@ -170,8 +170,6 @@ static int nn_xsub_events (struct nn_sockbase *self)
 
 static int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
 {
-	//printf("Sending %d bytes", nn_chunk_size(&msg->body));
-	printf("Sending ");
 	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, NULL);
 }
 
