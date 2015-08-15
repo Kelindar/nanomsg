@@ -53,6 +53,10 @@ void nn_vector_remove(struct nn_vector *vector, struct nn_pipe* value) {
 	}
 }
 
+void nn_vector_remove_at(struct nn_vector *vector, int index){
+	vector->data[index] = NULL;
+}
+
 struct nn_pipe* nn_vector_get(struct nn_vector *vector, int index) {
 	if (index >= vector->size || index < 0) {
 		printf("Index %d out of bounds for vector of size %d\n", index, vector->size);
@@ -83,8 +87,8 @@ int nn_vector_send(struct nn_vector *self, struct nn_msg *msg, struct nn_pipe *e
 	/*  TODO: We can optimise for the case when there's only one outbound
 		pipe here. No message copying is needed in such case. */
 
-		/*  In the specific case when there are no outbound pipes. There's nowhere
-			to send the message to. Deallocate it. */
+	/*  In the specific case when there are no outbound pipes. There's nowhere
+		to send the message to. Deallocate it. */
 	if (nn_slow(self->count) == 0) {
 		nn_msg_term(msg);
 		return 0;
@@ -95,6 +99,9 @@ int nn_vector_send(struct nn_vector *self, struct nn_msg *msg, struct nn_pipe *e
 	subcount = self->size;
 	for (i = 0; i < subcount; ++i) {
 		pipe = self->data[i];
+		if (pipe == NULL)
+			continue;
+
 		nn_msg_bulkcopy_cp(&copy, msg);
 		if (nn_fast(pipe == exclude)) {
 			nn_msg_term(&copy);
@@ -102,11 +109,12 @@ int nn_vector_send(struct nn_vector *self, struct nn_msg *msg, struct nn_pipe *e
 		else {
 			rc = nn_pipe_send(pipe, &copy);
 			errnum_assert(rc >= 0, -rc);
-			/*if (rc & NN_PIPE_RELEASE) {
+			if (rc & NN_PIPE_RELEASE) {
 				--self->count;
-				it = nn_list_erase (&self->pipes, it);
+				nn_vector_remove_at(self, i);
+				//it = nn_list_erase (&self->pipes, it);
 				continue;
-			}*/
+			}
 		}
 	}
 

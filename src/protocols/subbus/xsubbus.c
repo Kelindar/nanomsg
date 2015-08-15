@@ -26,6 +26,7 @@
 #include "llist.h"
 
 #include "../../nn.h"
+#include "../../transport.h"
 #include "../../subbus.h"
 #include "../utils/fq.h"
 
@@ -102,6 +103,8 @@ int nn_xsubbus_add (struct nn_sockbase *self, struct nn_pipe *pipe)
     nn_assert (sz == sizeof (rcvprio));
     nn_assert (rcvprio >= 1 && rcvprio <= 16);
 
+	printf("nn_xsubbus_add %d \n", pipe);
+
     data = nn_alloc (sizeof (struct nn_xsubbus_data), "pipe data (xsubbus)");
     alloc_assert (data);
     nn_fq_add (&xsubbus->inpipes, &data->initem, pipe, rcvprio);
@@ -120,7 +123,7 @@ void nn_xsubbus_rm (struct nn_sockbase *self, struct nn_pipe *pipe)
     xsubbus = nn_cont (self, struct nn_xsubbus, sockbase);
     data = nn_pipe_getdata (pipe);
 
-	printf("Pipe %d died \n", pipe);
+	//printf("nn_xsubbus_rm %d \n", pipe);
 
     nn_fq_rm (&xsubbus->inpipes, &data->initem);
     nn_dist_rm (&xsubbus->outpipes, &data->outitem);
@@ -133,9 +136,10 @@ void nn_xsubbus_in (struct nn_sockbase *self, struct nn_pipe *pipe)
     struct nn_xsubbus *xsubbus;
     struct nn_xsubbus_data *data;
 
+	//printf("nn_xsubbus_in %d \n", pipe);
+
     xsubbus = nn_cont (self, struct nn_xsubbus, sockbase);
     data = nn_pipe_getdata (pipe);
-
     nn_fq_in (&xsubbus->inpipes, &data->initem);
 }
 
@@ -144,9 +148,10 @@ void nn_xsubbus_out (struct nn_sockbase *self, struct nn_pipe *pipe)
     struct nn_xsubbus *xsubbus;
     struct nn_xsubbus_data *data;
 
+	printf("nn_xsubbus_out %d \n", pipe);
+
     xsubbus = nn_cont (self, struct nn_xsubbus, sockbase);
     data = nn_pipe_getdata (pipe);
-
     nn_dist_out (&xsubbus->outpipes, &data->outitem);
 }
 
@@ -178,13 +183,17 @@ int nn_xsubbus_broadcast(struct nn_sockbase *self, struct nn_msg *msg)
 
 int nn_xsubbus_send (struct nn_sockbase *self, struct nn_msg *msg)
 {
+	//return nn_xsubbus_broadcast(self, msg);
     struct nn_vector* subscribers;
     struct nn_xsubbus *xsubbus;
 	char op = *((char*)nn_chunkref_data(&msg->body));
 
-	/* Messages are prefixed with operation type 'M' */
+	printf("sending %s\n", (char*)nn_chunkref_data(&msg->body));
+
+	// Messages are prefixed with operation type 'M'
 	if (op == 'M') {
-		/* Match the message and retrieve the list of subscribers to send the message to */
+
+		// Match the message and retrieve the list of subscribers to send the message to
 		xsubbus = nn_cont(self, struct nn_xsubbus, sockbase);
 		subscribers = nn_xtrie_match(&xsubbus->trie, (uint8_t*)nn_chunkref_data(&msg->body) + 1, nn_chunkref_size(&msg->body) - 1);
 		if (subscribers == NULL) {
@@ -192,11 +201,11 @@ int nn_xsubbus_send (struct nn_sockbase *self, struct nn_msg *msg)
 			return 0;
 		}
 
-		/* Send the message to the list of subscribers */
+		// Send the message to the list of subscribers
 		return nn_vector_send(subscribers, msg, NULL);
 	}
 	else {
-		/* Other event types are broadcasted through the network */
+		// Other event types are broadcasted through the network
 		return nn_xsubbus_broadcast(self, msg);
 	}
 }
@@ -212,28 +221,28 @@ int nn_xsubbus_recv (struct nn_sockbase *self, struct nn_msg *msg)
     xsubbus = nn_cont (self, struct nn_xsubbus, sockbase);
     while (1) {
 
-        /*  Get next message in fair-queued manner. */
+        // Get next message in fair-queued manner. 
         rc = nn_fq_recv (&xsubbus->inpipes, msg, &pipe);
         if (nn_slow (rc < 0))
             return rc;
 
-		/*  The message should have no header. Drop malformed messages. */
+		//  The message should have no header. Drop malformed messages.
 		if (nn_chunkref_size(&msg->sphdr) == 0) {
 
-			/* Check the type of the message */
+			// Check the type of the message
 			op = *((uint8_t*)nn_chunkref_data(&msg->body));
 			if (op == 77) { // 'M'
 				return 0;
 			}
 			else {
-				/* This is a system event, handle differently */
+				// This is a system event, handle differently
 				nn_xsubbus_handle_event(self, msg, pipe);
 				nn_msg_term(msg);
 				continue;
 			}
 		}
 
-		/* Drop malformed messages*/
+		// Drop malformed messages
         nn_msg_term (msg);
     }
 

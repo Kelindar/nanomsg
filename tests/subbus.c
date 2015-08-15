@@ -39,8 +39,10 @@ int node(const int argc, const char **argv)
 	if (argc >= 3)
 	{
 		int x = 3;
-		for (x; x<argc; x++)
+		for (x; x < argc; x++) {
 			assert(nn_connect(sock, argv[x]) >= 0);
+			printf("Connecting to %s\n", argv[x]);
+		}
 	}
 	Sleep(2000); // wait for connections
 	int to = 100;
@@ -59,14 +61,14 @@ int node(const int argc, const char **argv)
 	{
 		// RECV
 		char *buf = NULL;
-		int recv = nn_recv(sock, &buf, NN_MSG, NN_DONTWAIT);
+		int recv = nn_recv(sock, &buf, NN_MSG, 0);
 		if (recv >= 0)
 		{
 			printf("%s: RECEIVED '%s' FROM BUS\n", argv[1], buf);
 			nn_freemsg(buf);
 		}
 
-		Sleep(1000);
+		Sleep(100);
 
 		int send = nn_send(sock, argv[1], sz_n, 0);
 	}
