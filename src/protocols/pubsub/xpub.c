@@ -194,34 +194,6 @@ static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 	// Messages are prefixed with operation type 'M'
 	if (op == 'M') {
 
-		// Match the message and retrieve the list of subscribers to send the message to
-		/*subscribers = nn_trie_match(&xpub->trie, (uint8_t*)nn_chunkref_data(&msg->body) + 1, nn_chunkref_size(&msg->body) - 1);
-		if (subscribers == NULL) {
-			nn_msg_term(msg);
-			return 0;
-		}
-
-		printf("outpipes: %d\n", xpub->out_pipes.count);
-
-		struct nn_list_item *it;
-		struct nn_dist_data *data;
-		struct nn_xpub_data *pipe_data;
-
-		it = nn_list_begin(&xpub->out_pipes.pipes);
-		while (it != nn_list_end(&xpub->out_pipes.pipes)) {
-			data = nn_cont(it, struct nn_dist_data, item);
-			pipe_data = (struct nn_xpub_data*)(nn_pipe_getdata(data->pipe));
-
-			//printf(" - %d\n", data->pipe);
-			printf(" - %d\n", pipe_data->test);
-			it = nn_list_next(&xpub->out_pipes.pipes, it);
-		}*/
-
-		//return nn_dist_send(&xpub->out_pipes, msg, NULL);;
-		// Send the message to the list of subscribers
-		//return nn_vector_send(subscribers, msg, NULL);
-		//return 0;
-
 		/*  In the specific case when there are no outbound pipes. There's nowhere
 		to send the message to. Deallocate it. */
 		if (nn_slow(dist->count) == 0) {
@@ -236,7 +208,7 @@ static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 			data = nn_cont(it, struct nn_dist_data, item);
 			nn_msg_bulkcopy_cp(&copy, msg);
 
-			// Match
+			// Match the message
 			pipe_data = (struct nn_xpub_data*)(nn_pipe_getdata(data->pipe));
 			rc = nn_trie_match(&pipe_data->trie, (uint8_t*)nn_chunkref_data(&msg->body) + 1, nn_chunkref_size(&msg->body) - 1);
 			if (rc == 0) {
