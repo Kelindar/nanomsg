@@ -191,7 +191,7 @@ static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 	op = *((char*)nn_chunkref_data(&msg->body));
 	dist = &(nn_cont(self, struct nn_xpub, sockbase)->out_pipes);
 
-	printf("send: %s", nn_chunkref_data(&msg->body));
+	//printf("send: %s", nn_chunkref_data(&msg->body));
 
 	// Messages are prefixed with operation type 'M'
 	if (op == 'M') {
@@ -214,7 +214,7 @@ static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 			pipe_data = (struct nn_xpub_data*)(nn_pipe_getdata(data->pipe));
 			rc = nn_trie_match(&pipe_data->trie, (uint8_t*)nn_chunkref_data(&msg->body) + 1, nn_chunkref_size(&msg->body) - 1);
 			if (rc == 0) {
-				printf("no subscribers: %s", nn_chunkref_data(&msg->body));
+				//printf("no subscribers: %s", nn_chunkref_data(&msg->body));
 				nn_msg_term(&copy);
 			} else if (rc == 1) {
 				rc = nn_pipe_send(data->pipe, &copy);
