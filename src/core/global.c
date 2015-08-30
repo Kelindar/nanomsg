@@ -645,8 +645,8 @@ int nn_getsockopt (int s, int level, int option, void *optval,
 int nn_bind (int s, const char *addr)
 {
     int rc;
-
     NN_BASIC_CHECKS;
+    
 
     nn_glock_lock();
     rc = nn_global_create_ep (s, addr, 1);

@@ -41,19 +41,18 @@ char *date()
 int server(const char *url)
 {
 	int sock = nn_socket(AF_SP, NN_PUB);
-	assert(sock >= 0);
-	assert(nn_bind(sock, url) >= 0);
+	nn_bind(sock, url);
 
-	char d[] = "Mhello.world";
-	int sz_d = strlen(&d) + 1; // '\0' too
+	char msg[] = "Mhello.world";
+	int sz_d = strlen(&msg) + 1; // '\0' too
 
 	while (1)
 	{
 		//char *d = date();
 		//int sz_d = strlen(d) + 1; // '\0' too
 		//printf("SERVER: PUBLISHING DATE %s\n", d);
-		printf("SERVER: PUBLISHING '%s'\n", d);
-		int bytes = nn_send(sock, &d, sz_d, 0);
+		printf("PUBLISH: '%s'\n", msg);
+		int bytes = nn_send(sock, &msg, sz_d, 0);
 		assert(bytes == sz_d);
 
 		// Receive and wait
@@ -67,10 +66,8 @@ int server(const char *url)
 int client(const char *url, const char *name)
 {
 	int sock = nn_socket(AF_SP, NN_SUB);
-	assert(sock >= 0);
-	// TODO learn more about publishing/subscribe keys
-	assert(nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0) >= 0);
-	assert(nn_connect(sock, url) >= 0);
+	nn_setsockopt(sock, NN_SUB, NN_SUB_SUBSCRIBE, "", 0);
+	nn_connect(sock, url);
 
 	Sleep(1000);
 
@@ -84,7 +81,7 @@ int client(const char *url, const char *name)
 		char *buf = NULL;
 		int bytes = nn_recv(sock, &buf, NN_MSG, 0);
 		assert(bytes >= 0);
-		printf("CLIENT (%s): RECEIVED %s\n", name, buf);
+		printf("MESSAGE: %s\n", buf);
 		nn_freemsg(buf);
 	}
 	return nn_shutdown(sock, 0);

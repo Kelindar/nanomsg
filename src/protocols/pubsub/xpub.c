@@ -130,6 +130,8 @@ static int nn_xpub_add (struct nn_sockbase *self, struct nn_pipe *pipe)
 	nn_fq_add(&xpub->in_pipes, &data->in_item, pipe, rcvprio);
     nn_pipe_setdata (pipe, data);
 
+    printf("[XPUB] Connected: %d\n", pipe);
+	
     return 0;
 }
 
@@ -137,6 +139,8 @@ static void nn_xpub_rm (struct nn_sockbase *self, struct nn_pipe *pipe)
 {
     struct nn_xpub *xpub;
     struct nn_xpub_data *data;
+	
+	printf("[XPUB] Disconnected: %d\n", pipe);
 
     xpub = nn_cont (self, struct nn_xpub, sockbase);
     data = nn_pipe_getdata (pipe);
@@ -234,7 +238,7 @@ static int nn_xpub_send (struct nn_sockbase *self, struct nn_msg *msg)
 	}
 	else {
 		// Other event types are broadcasted through the network
-		return nn_dist_send(dist, msg, NULL);;
+		return nn_dist_send(dist, msg, NULL);
 	}
 
 }
@@ -294,12 +298,12 @@ static int nn_xpub_handle_event(struct nn_sockbase *self, struct nn_msg *msg, st
 	pipe_data = (struct nn_xpub_data*)(nn_pipe_getdata(pipe));
 
 	if (op == 83) { // 'S'
-		printf("SUBSCRIBE %d on '%s' \n", pipe, topic);
+		printf("[XPUB] Subscribe: %d to '%s' \n", pipe, topic);
 		nn_xpub_subscribe(self, &pipe_data->trie, topic, size);
 	}
 
 	if (op == 85) { // 'U'
-		printf("UNSUBSCRIBE %d on '%s' \n", pipe, topic);
+		printf("[XPUB] Unsubscribe: %d from '%s' \n", pipe, topic);
 		nn_xpub_unsubscribe(self, &pipe_data->trie, topic, size);
 	}
 

@@ -22,6 +22,7 @@
 */
 
 #include "xsub.h"
+#include "trie.h"
 
 #include "../../nn.h"
 #include "../../pubsub.h"
@@ -45,6 +46,7 @@ struct nn_xsub {
     struct nn_sockbase sockbase;
     struct nn_fq in_pipes;
     struct nn_dist out_pipes;
+    struct nn_trie trie;
 };
 
 /*  Private functions. */
@@ -84,10 +86,12 @@ static void nn_xsub_init (struct nn_xsub *self,
     nn_sockbase_init (&self->sockbase, vfptr, hint);
     nn_fq_init (&self->in_pipes);
     nn_dist_init (&self->out_pipes);
+    nn_trie_init (&self->trie);
 }
 
 static void nn_xsub_term (struct nn_xsub *self)
 {
+    nn_trie_term (&self->trie);
     nn_dist_term (&self->out_pipes);
     nn_fq_term (&self->in_pipes);
     nn_sockbase_term (&self->sockbase);
@@ -123,6 +127,8 @@ static int nn_xsub_add (struct nn_sockbase *self, struct nn_pipe *pipe)
     nn_fq_add (&xsub->in_pipes, &data->in_item, pipe, rcvprio);
     nn_dist_add (&xsub->out_pipes, &data->out_item, pipe);
 
+    printf("[XSUB] Connected: %d\n", pipe);
+
     return 0;
 }
 
@@ -130,12 +136,15 @@ static void nn_xsub_rm (struct nn_sockbase *self, struct nn_pipe *pipe)
 {
     struct nn_xsub *xsub;
     struct nn_xsub_data *data;
+    
+    printf("[XSUB] Disconnected: %d\n", pipe);
 
     xsub = nn_cont (self, struct nn_xsub, sockbase);
     data = nn_pipe_getdata (pipe);
     nn_fq_rm (&xsub->in_pipes, &data->in_item);
     nn_dist_rm (&xsub->out_pipes, &data->out_item);
     nn_free (data);
+    
 }
 
 static void nn_xsub_in (struct nn_sockbase *self, struct nn_pipe *pipe)
@@ -170,7 +179,27 @@ static int nn_xsub_events (struct nn_sockbase *self)
 
 static int nn_xsub_send(struct nn_sockbase *self, struct nn_msg *msg)
 {
-	//printf("send: %d bytes: %s\n", nn_chunkref_size(&msg->body), nn_chunkref_data(&msg->body));
+	char msgtype;
+	void *msgval;
+	size_t msglen;
+	struct nn_xsub *xsub;
+
+	// Set the context
+	xsub = nn_cont(self, struct nn_xsub, sockbase);
+	msgval = nn_chunkref_data(&msg->body);
+	msglen = nn_chunkref_size(&msg->body);
+	msgtype = *((char*)msgval);
+
+	if (msgtype == 'S') {
+		printf("[XSUB] Subscribe: %s\n", ((char*)msgval + 1));
+		nn_trie_subscribe(&xsub->trie, ((char*)msgval + 1), msglen - 1);
+	}
+
+	if (msgtype == 'U') {
+		printf("[XSUB] Unsubscribe: %s\n", ((char*)msgval + 1));
+		nn_trie_unsubscribe(&xsub->trie, ((char*)msgval + 1), msglen - 1);
+	}
+
 	return nn_dist_send(&nn_cont(self, struct nn_xsub, sockbase)->out_pipes, msg, NULL);
 }
 
